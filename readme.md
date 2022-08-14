@@ -1,4 +1,4 @@
-# Transat
+# 💺 Transat
 
 Warning: this is a work in progress
 
