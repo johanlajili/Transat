@@ -1,0 +1,8 @@
+{
+  "name": "transat",
+  "version": "1.0.0",
+  "description": "Transactional state library for react",
+  "main": "src/index.ts",
+  "author": "Johan Lajili",
+  "license": "MIT"
+}
