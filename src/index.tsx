@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from "react";
-
+import hash from 'string-hash'
 type TransatProviderProps<T> = {
   children: React.ReactNode;
   fetchState: () => Promise<T>;
@@ -11,23 +11,71 @@ type TransatProviderProps<T> = {
   historyDepth?: number;
 };
 
-export const createTransat = <T extends unknown>() => {
-    const StateContext = React.createContext<{state: T | null, setState: (value: T) => void} | null>(null);
+
+type TransatToken = {
+    version: number;
+    hash: number;
+}
+
+type TransatValidate<T> = (token: TransatToken, options?: {
+    onConflict: 'REBASE' | 'CANCEL' | ((a: T, b: T) => T),
+}) => {success: boolean, error?: string};
+
+
+type TransatSetState<T> = (state: T) => {
+    cancel: () => void;
+    validate: TransatValidate<T>;
+};
+type TransatContext<T> = {
+    state: T | null;
+    setState: TransatSetState<T>;
+}
+
+export const createTransat = <T extends {version: number}>() => {
+    const StateContext = React.createContext<TransatContext<T> | null>(null);
     
     const TransatProvider = (
         props: TransatProviderProps<T>
       ) => {
         const [state, setState] = React.useState<T | null>(null);
-      
+        const history = React.useRef<T[]>([]);
+        
+        const revertToHistoryIndex = useCallback((index: number) => {
+            const current = history.current[index];
+            setState({...current});
+
+        } , [history, setState]);
+
         const transatSetState = useCallback((value: T) => {
+            
+            const historyIndex = history.current.length - 1;
+            
             setState(value);
-        }, [])
+            history.current.push(value);
+
+            const result: ReturnType<TransatSetState<T>> = {
+                cancel : () => {
+                    revertToHistoryIndex(historyIndex);
+                },
+                validate: (token, options) => {
+                    const versionSuccess = token.version === value.version;
+                    const hashSuccess = token.hash === hash(JSON.stringify(value));
+                    const success =  versionSuccess && hashSuccess; 
+                    return {
+                        success: success
+                    }
+                }
+            }
+            return result;
+        }, [history, state, revertToHistoryIndex])
        
         useEffect(() => {
           props.fetchState().then((state) => {
             setState(state);
+            history.current.push(state);
           });
         }, [props.fetchState]);
+
         return (
           <StateContext.Provider value={{state, setState: transatSetState}}>
             {props.children}
@@ -46,6 +94,12 @@ export const createTransat = <T extends unknown>() => {
     };
 
     return { TransatProvider, useTransat };
+}
 
+export const calculateVerificationToken= <T extends {version: number}>(state: T) => {
+    return {
+        version: state.version,
+        hash: hash(JSON.stringify(state))
+    }
 }
 
