@@ -135,7 +135,6 @@ describe('Transat E2E Tests', () => {
     });
 
     it('allows to verify the changes against the backend token', async () => {
-
         testApp({
             server: () => {
                 server.use(
@@ -193,5 +192,74 @@ describe('Transat E2E Tests', () => {
         await waitFor(async () => {
             expect(screen.queryByText('This has been validated')).toBeInTheDocument();
         });
+    });
+
+    it('supports refresh if the validation does not work', async () => {
+        const backendState = {
+            hello: 'world',
+            version: 1
+        }
+        
+        testApp({
+            server: () => {
+                server.use(
+                    rest.get(`https://mywebsite.com/getState`, (req, res, ctx) => {
+                        return res(ctx.json(backendState));
+                    }),
+                    rest.get('https://mywebsite.com/setState', (req, res, ctx) => {
+                        const value = req.url.searchParams.get('value');
+                        
+                        const state = {
+                            ...backendState,
+                            hello: value,
+                            version: backendState.version + 1
+                        };
+                        console.log(state);
+                        const token = calculateVerificationToken(state);
+                        
+                        return res(ctx.json(token));
+                    })
+                );
+            },
+            component: () => {
+                const {state, setState} = useTransat();
+                const [validated, setValidated] = React.useState(false);
+                return (
+                    <div>
+                        {validated && <p>This has been validated</p>}
+                        <p>Hello {state?.hello}</p>
+                        <button onClick={() => {
+                            const transaction = state && setState({...state, hello: 'sailor', version: state.version + 1});
+
+                            fetch('https://mywebsite.com/setState?value=sailor').then(res => res.json()).then(token => {    
+                            const validated = transaction?.validate(token).success;    
+                                setValidated( validated ?? false);
+                            })
+                        }}>
+                            Change
+                        </button>
+                    </div>
+                )
+            }
+        });
+
+        await waitFor(async () => {
+            expect(screen.getByText('Hello world')).toBeInTheDocument();
+        }
+        );
+
+        backendState.hello = 'there';
+        backendState.version=2;
+
+        act(() => {
+            screen.getByText('Change').click();
+        });
+
+        await waitFor(async () => {
+            expect(screen.queryByText('This has been validated')).not.toBeInTheDocument();
+            expect(screen.getByText('Hello there')).toBeInTheDocument();
+        });
+
+
     })
 });

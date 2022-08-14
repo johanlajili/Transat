@@ -61,6 +61,21 @@ export const createTransat = <T extends {version: number}>() => {
                     const versionSuccess = token.version === value.version;
                     const hashSuccess = token.hash === hash(JSON.stringify(value));
                     const success =  versionSuccess && hashSuccess; 
+                    
+                    const onConflict = options?.onConflict ?? 'CANCEL';
+                    if (!success) {
+                        if (onConflict === 'REBASE') {
+                            // revertToHistoryIndex(historyIndex);
+                        } else if (onConflict === 'CANCEL') {
+                            props.fetchState().then((state) => {
+                                setState(state);
+                                history.current.push(state);
+                             });
+                        } else {
+                            const newState = onConflict(history.current[historyIndex], value);
+                            setState(newState);
+                        }
+                    }
                     return {
                         success: success
                     }
